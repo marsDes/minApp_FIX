@@ -1,0 +1,124 @@
+[官方文档](https://developers.weixin.qq.com/miniprogram/dev/component/web-view.html)<br>
+重点是微信版本<em>6.7.2</em>及以后<em>navigationStyle: custom</em> 自定义导航对<em>web-view</em>组件无效，导致不同系统手机不同微信版本号表现迥异。需要开发考虑到多种情况的兼容。
+
+### 情况分析
+目前我在开发中主要遇到以下几种情况,欢迎留言补充<br>
+>1. 微信版本号6.7.2以下的手机，需要再h5页面模拟小程序的navigationBar；
+>2. 微信版本号6.7.2级以上的苹果机型，小程序自带原生navigationBar，无需在h5页面模拟;
+>3. 微信版本号6.7.2及以上的安卓手机，小程序自带原生navigationBar，无需在h5页面模拟，但是web-view高度非100%，页面内容被截，超出半部分为状态栏高度加自定义navigationBar高度。（如下图所示）
+![安卓机机型](https://user-gold-cdn.xitu.io/2018/9/22/165ff7718063d6b0?w=858&h=724&f=png&s=576167)
+
+### 解决方案
+在小程序判断微信版本号，获取手机状态栏高度，在使用web-view组件的页面，将需要的信息传递过到h5页面，针对机型做响应的兼容处理。
+```js
+// 小程序代码 基于wepy框架
+// app.wpy
+...
+    //获取系统相关信息
+    onLaunch () {
+        try(){
+            const sysInfo = wepy.getSystemInfoSync()
+            this.statusBarHeight = sysInfo.statusBarHeight
+            //以后版本号出现2位情况的话需要末位补0
+            this.globalData.h5StatusBarHeight = Number(res.version.replace(/\./g, '')) < 672 ? res.statusBarHeight : 0
+        }catch(e){
+            console.log('获取系统信息异常',e)
+        }
+    }
+```
+```html
+<!-- webview.wpy -->
+<template>
+    <web-view src="https://url.com?pTop={{pTop}}"></web-view>
+</template>
+```
+```js
+...
+onLoad () {
+    this.pTop = this.$parent.globalData.h5StatusBarHeight
+}
+...
+```
+```html
+<!-- h5 app.vue -->
+<template>
+  <div id="app">
+    <div v-if="pTop" class='navbar'>
+      <div class='nav'  :style="{paddingTop:pTop+'px'}">
+        <div class='nav_l'>
+          <div class="back" @click="back">
+            <img src="./assets/back_black.svg" />
+          </div>
+        </div>
+        <div class="nav_m">nav标题</div>
+        <div class='nav_r'></div>
+      </div>
+    </div>
+    <div :style="{paddingTop:pTop+'px',marginTop:mTop+'rem',paddingBottom:isPbottom?'1.4rem':'0'}">
+      <router-view/>
+    </div>
+  </div>
+</template>
+```
+```js
+export default {
+  name: "app",
+  data(){
+    return {
+      pTop:20,  // 手机状态栏高度
+      mTop:0.88, // navbar 高度 
+      isPbottom:false // 是否需要padding-bottom
+    }
+  },
+  methods: {
+    back () {
+      wx.miniProgram.navigateBack()
+    }
+  },
+  created(){
+    this.pTop= Number(this.$route.query.pTop)
+    // 安卓机
+    this.isPbottom = this.pTop===0&&/(Android)/i.test(navigator.userAgent)
+    if(!this.pTop){
+      this.mTop= 0
+    }
+  }
+};
+```
+### 其他情景
+1. 底部固定悬浮
+```html
+<!-- isFixBottom 判断同理isPbottom -->
+<footer :style="{bottom:isFixBottom?'1.4rem':'0'}">
+ 底部悬浮容器
+</footer>
+```
+2. 页面内容高度百分百即全屏
+```html
+<!-- 高度自适应百分百 -->
+<style>
+    #container {
+      height: 100%;
+      width: 100%;
+      display: table;
+    }
+    #fixbox{
+      display: table-row;
+    }
+    #view{
+      height: 100%;
+      width: 100%;
+      display: table-row;
+    }
+</style>
+<div>
+    <navBar>自定义navbar</navBar>
+    <div class='container'>
+        <div class='fixbox' :style="{height:isFixBottom?'1.4rem':'0'}"></div>
+        <div class='view' :style="{marginTop:isFixBottom?'-1.4rem':'0'}"></div>
+    </div>
+</div>
+```
+3. 全屏带输入框，键盘拉起会导致页面高度100%，需要监听键盘拉起再做兼容...
+### 总结
+navigationStyle: custom 目前还是有比较多一言难尽的地方。社区反映的问题也比较多，不排除后期官方会有所调整，项目中除了做兼容还有就是根据运营数据查看用户机型版本分布做升级提醒。<br>1.4这个值怎么来？ 状态栏高度加navbar高度加安全高度，目前主流机型不表现算正常，当然跟页面ui也有关系。时间比较紧迫，没有仔细精算，欢迎补充提供更好的方案
