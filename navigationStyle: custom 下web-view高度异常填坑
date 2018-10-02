@@ -47,7 +47,7 @@ onLoad () {
       <div class='nav'  :style="{paddingTop:pTop+'px'}">
         <div class='nav_l'>
           <div class="back" @click="back">
-            <img src="./assets/back_black.svg" />
+            <img src="./assets/back.svg" />
           </div>
         </div>
         <div class="nav_m">nav标题</div>
